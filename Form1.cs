@@ -7,16 +7,23 @@ namespace WinFormsApp1
 {
     public partial class Form1 : Form
     {
+        Configuration KeyResult1;
+        Configuration KeyResult2;
+
         public Form1()
         {
             InitializeComponent();
+            KeyResult1 = new Configuration();
+            KeyResult2 = new Configuration();
         }
 
         public void Clear()
         {
+            KeyResult1.Experiments.Clear();
+            KeyResult2.Experiments.Clear();
             richTextBoxLog.Text = "";
-            richTextBoxKey1.Text += "";
-            richTextBoxKey2.Text += "";
+            richTextBoxResult_Key1.Text += "";
+            richTextBoxResult_Key2.Text += "";
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -25,12 +32,12 @@ namespace WinFormsApp1
 
             if (textBoxKeys1.TextLength < 10)
             {
-                richTextBoxLog.Text = "Заполните поле 1";
+                Log("Заполните поле 1");
                 return;
             }
             if (textBoxKeys2.TextLength < 10)
             {
-                richTextBoxLog.Text = "Заполните поле 1";
+                Log("Заполните поле 1");
                 return;
             }
 
@@ -39,16 +46,17 @@ namespace WinFormsApp1
 
             if (!Key1.Parce(textBoxKeys1.Text))
             {
-                richTextBoxLog.Text = "Ошибка парсинга ключа 1";
+                Log("Ошибка парсинга ключа 1");
                 return;
             }
 
             if (!Key2.Parce(textBoxKeys2.Text))
             {
-                richTextBoxLog.Text = "Ошибка парсинга ключа 2";
+                Log("Ошибка парсинга ключа 2");
                 return;
             }
 
+            int count = 0;
             foreach (var item in Key1.Experiments.Values)
             {
                 Experiment obj2 = null;
@@ -62,21 +70,33 @@ namespace WinFormsApp1
                     continue;
                 }
 
+                count++;
                 Log($"{item.Name} отличается\n", true);
                 LogExperiments(item, obj2);
             }
+
+            if (count == 0)
+                Log("Отличий в ключах не обнаружено");
+            else
+                Log($"Отличий обнаружено {count}");
+
         }
 
         public void Log(string txt, bool append = false)
         {
-            if (append) richTextBoxLog.Text += txt;
+            if (append) richTextBoxLog.Text = txt + richTextBoxLog.Text;
             else richTextBoxLog.Text = txt;
         }
 
         public void LogExperiments(Experiment exp1, Experiment exp2)
         {
-            richTextBoxKey1.Text += exp1 != null ? exp1.GetString() : $"Отсутствует {exp2.Name}\n";
-            richTextBoxKey2.Text += exp2 != null ? exp2.GetString() : $"Отсутствует {exp1.Name}\n";
+            richTextBoxResult_Key1.Text += exp1 != null ? exp1.GetString() : $"Отсутствует {exp2.Name}\n";
+            richTextBoxResult_Key2.Text += exp2 != null ? exp2.GetString() : $"Отсутствует {exp1.Name}\n";
+            if (exp1 != null)
+                KeyResult1.Experiments.Add(exp1.Name, exp1);
+
+            if (exp2 != null)
+                KeyResult2.Experiments.Add(exp2.Name, exp2);
         }
 
         public class Configuration
@@ -126,7 +146,7 @@ namespace WinFormsApp1
                 for (int i = 0; i < experiments_string.Length; i = i + 2)
                 {
                     if (i + 1 >= experiments_string.Length) continue;
-                    Experiments.Add(experiments_string[i], new Experiment(experiments_string[i], experiments_string[i + 1]));
+                    Experiments.Add(experiments_string[i].Trim(' '), new Experiment(experiments_string[i], experiments_string[i + 1]));
                 }
                 Console.WriteLine("Парсинг экспериментов завершен. Добавлено экспериментов " + Experiments.Count);
             }
@@ -228,6 +248,85 @@ namespace WinFormsApp1
                 return txt.ToString();
             }
 
+            public string GetKeysForCommandLine()
+            {
+                StringBuilder fieldtrial = new StringBuilder();
+                StringBuilder fieldtrial_params = new StringBuilder();
+                StringBuilder disable_features = new StringBuilder();
+                StringBuilder enable_features = new StringBuilder();
+
+                fieldtrial.Append("--force-fieldtrials=\"");
+
+                foreach (var exp in Experiments.Values)
+                {
+                    fieldtrial.AppendFormat("{0}/{1}/", exp.Name, exp.Value);
+
+                    if (exp.Params.Count > 0)
+                    {
+                        if (fieldtrial_params.Length == 0)
+                            fieldtrial_params.Append(" --force-fieldtrial-params=\"");
+                        else
+                            fieldtrial_params.Append(",");
+
+                        fieldtrial_params.AppendFormat("{0}.{1}:", exp.Name, exp.Value);
+                        for (int i = 0; i < exp.Params.Count; i++)
+                        {
+                            var param = exp.Params[i];
+                            fieldtrial_params.AppendFormat("{0}/{1}", param.Name, param.Value);
+                            if (i < exp.Params.Count - 1)
+                                fieldtrial_params.Append("/");
+                        }
+                    }
+
+                    var features = exp.Features.FindAll(x => x.State == true);
+                    
+                    if (features.Count > 0)
+                    {
+                        if (enable_features.Length == 0)
+                            enable_features.Append(" --enable-features=\"");
+                        else
+                            enable_features.Append(",");
+
+                        foreach (var feature in features)
+                        {
+                            enable_features.AppendFormat("{0}<{1}", feature.Name, exp.Name);
+                        }
+                    }
+
+                    features.Clear();
+                    features = exp.Features.FindAll(x => x.State == false);
+                    
+                    if (features.Count > 0)
+                    {
+                        if (disable_features.Length == 0)
+                            disable_features.Append(" --disable-features=\"");
+                        else
+                            disable_features.Append(",");
+
+                        foreach (var feature in features)
+                        {
+                            disable_features.AppendFormat("{0}<{1}", feature.Name, exp.Name);
+                        }
+                    }
+                }
+
+                fieldtrial.Append('"');
+
+                if (fieldtrial_params.Length > 0)
+                    fieldtrial_params.Append('"');
+
+                if (enable_features.Length > 0)
+                    enable_features.Append('"');
+
+                if (disable_features.Length > 0)
+                    disable_features.Append('"');
+
+                return String.Format("{0}{1}{2}{3}", 
+                    fieldtrial.Length > 1 ? fieldtrial.ToString() : "",
+                    fieldtrial_params.Length > 1 ? fieldtrial_params.ToString() : "",
+                    enable_features.Length > 1 ? enable_features.ToString() : "",
+                    disable_features.Length > 1 ? disable_features.ToString() : "");
+            }
         }
 
         public class Experiment
@@ -241,8 +340,8 @@ namespace WinFormsApp1
 
             public Experiment(string name, string val)
             {
-                Name = name;
-                Value = val;
+                Name = name.Trim(' ');
+                Value = val.Trim(' ');
                 Features = new List<Feature>();
                 Params = new List<Param>();
             }
@@ -315,7 +414,7 @@ namespace WinFormsApp1
 
             public Feature(string name, bool state)
             {
-                Name = name;
+                Name = name.Trim(' ');
                 State = state;
             }
 
@@ -345,8 +444,8 @@ namespace WinFormsApp1
 
             public Param(string name, string val)
             {
-                Name = name;
-                Value = val;
+                Name = name.Trim(' ');
+                Value = val.Trim(' ');
             }
 
             public override bool Equals(object obj)
@@ -366,6 +465,18 @@ namespace WinFormsApp1
                 }
                 return object.Equals(this.Name, that.Name) && this.Value == that.Value;
             }
+        }
+
+        private void buttonCopyKey_Key1_Click(object sender, EventArgs e)
+        {
+            Clipboard.SetText(KeyResult1.GetKeysForCommandLine());
+            Log("Ключ 1 скопирован в буфер обмена\n", true);
+        }
+
+        private void buttonCopyKey_Key2_Click(object sender, EventArgs e)
+        {
+            Clipboard.SetText(KeyResult2.GetKeysForCommandLine());
+            Log("Ключ 2 скопирован в буфер обмена\n", true);
         }
     }
 }
