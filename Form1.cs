@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Windows.Forms;
+using System.Linq;
 
 namespace WinFormsApp1
 {
@@ -22,8 +23,8 @@ namespace WinFormsApp1
             KeyResult1.Experiments.Clear();
             KeyResult2.Experiments.Clear();
             richTextBoxLog.Text = "";
-            richTextBoxResult_Key1.Text += "";
-            richTextBoxResult_Key2.Text += "";
+            richTextBoxResult_Key1.Text = "";
+            richTextBoxResult_Key2.Text = "";
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -56,55 +57,53 @@ namespace WinFormsApp1
                 return;
             }
 
-            int count = 0;
-            foreach (var item in Key1.Experiments.Values)
-            {
-                Experiment obj2 = null;
-                if (Key2.Experiments.ContainsKey(item.Name))
-                {
-                    obj2 = Key2.Experiments[item.Name];
-                }
+            KeyResult1 = Key1.Compare(Key2);
+            KeyResult2 = Key2.Compare(Key1);
 
-                if (Equals(item, obj2))
-                {
-                    continue;
-                }
-
-                count++;
-                Log($"{item.Name} отличается\n", true);
-                LogExperiments(item, obj2);
-            }
-
-            if (count == 0)
-                Log("Отличий в ключах не обнаружено");
-            else
-                Log($"Отличий обнаружено {count}");
-
+            Print();
         }
 
+        /// <summary>
+        /// Записать лог
+        /// </summary>
+        /// <param name="txt">текст для записи</param>
+        /// <param name="append">добавить к существующему</param>
         public void Log(string txt, bool append = false)
         {
-            if (append) richTextBoxLog.Text = txt + richTextBoxLog.Text;
-            else richTextBoxLog.Text = txt;
+            if (append) richTextBoxLog.Text = richTextBoxLog.Text + txt + "\n";
+            else richTextBoxLog.Text = txt + "\n";
         }
 
-        public void LogExperiments(Experiment exp1, Experiment exp2)
+        public void Print()
         {
-            richTextBoxResult_Key1.Text += exp1 != null ? exp1.GetString() : $"Отсутствует {exp2.Name}\n";
-            richTextBoxResult_Key2.Text += exp2 != null ? exp2.GetString() : $"Отсутствует {exp1.Name}\n";
-            if (exp1 != null)
-                KeyResult1.Experiments.Add(exp1.Name, exp1);
+            foreach (var item in KeyResult1.Experiments)
+            {
+                richTextBoxResult_Key1.Text += item.Value.GetString();
+            }
+            foreach (var item in KeyResult2.Experiments)
+            {
+                richTextBoxResult_Key2.Text += item.Value.GetString();
+            }
 
-            if (exp2 != null)
-                KeyResult2.Experiments.Add(exp2.Name, exp2);
+            if (KeyResult1.Experiments.Count == 0 && KeyResult2.Experiments.Count == 0)
+                Log("Набор параметров в ключах одинаковый", true);
         }
 
         public class Configuration
         {
             public SortedDictionary<string, Experiment> Experiments = new SortedDictionary<string, Experiment>();
 
+            /// <summary>
+            /// Возвращает колличество экспериментов в конфигурации
+            /// </summary>
+            /// <returns></returns>
             public int GetEperimentsCount() { return Experiments.Count; }
 
+            /// <summary>
+            /// Парсит ключ
+            /// </summary>
+            /// <param name="keys_command_line">ключ с show-variations-cmd</param>
+            /// <returns></returns>
             public bool Parce(string keys_command_line)
             {
                 if (string.IsNullOrEmpty(keys_command_line)) return false;
@@ -136,6 +135,10 @@ namespace WinFormsApp1
                 return true;
             }
 
+            /// <summary>
+            /// Создание экспериментов в конфигурации
+            /// </summary>
+            /// <param name="fieldtrials">строковый параметр содержащий --force-fieldtrials=</param>
             public void ParceExperiments(string fieldtrials)
             {
                 // Удаляем ключ в первом элементе
@@ -148,14 +151,18 @@ namespace WinFormsApp1
                     if (i + 1 >= experiments_string.Length) continue;
                     Experiments.Add(experiments_string[i].Trim(' '), new Experiment(experiments_string[i], experiments_string[i + 1]));
                 }
-                Console.WriteLine("Парсинг экспериментов завершен. Добавлено экспериментов " + Experiments.Count);
+                //Log("Парсинг экспериментов завершен. Добавлено экспериментов " + Experiments.Count, true);
             }
 
+            /// <summary>
+            /// Добавление функциональностей в существующие эксперименты
+            /// </summary>
+            /// <param name="features_key">строковый параметр содержащий --enable-features=</param>
             public void ParceFeature(string features_key)
             {
                 if (!features_key.Contains("="))
                 {
-                    Console.WriteLine("Ошибка парсинга features!");
+                    //Log("Ошибка парсинга features!", true);
                     return;
                 }
 
@@ -168,7 +175,7 @@ namespace WinFormsApp1
                     string[] keys = item.Split('<');
                     if (keys.Length < 2)
                     {
-                        Console.WriteLine("Ошибка: отсутствует фича/эксперимент в строке " + item);
+                        //Log("Ошибка: отсутствует фича/эксперимент в строке " + item, true);
                         continue;
                     }
 
@@ -177,21 +184,25 @@ namespace WinFormsApp1
 
                     if (!Experiments.ContainsKey(experiment_name))
                     {
-                        Console.WriteLine("Ошибка: отсутствует эксперимент {0} в списке ", experiment_name);
+                        //Log($"Ошибка: отсутствует эксперимент {experiment_name} в списке", true);
                         continue;
                     }
                     Experiments[experiment_name].Features.Add(new Feature(feature_name, features_state));
                     count++;
                 }
 
-                Console.WriteLine("Парсинг фичей завершен. {0} фичей {1}", features_state ? "Включенных" : "Выключенных", count);
+                //Log($"Парсинг фичей завершен. {(features_state ? "Включенных" : "Выключенных")} фичей {count}", true);
             }
 
+            /// <summary>
+            /// Добавление параметров в существующие эксперименты
+            /// </summary>
+            /// <param name="feature_params">строковый параметр содержащий --force-fieldtrial-params=</param>
             public void ParceFeatureParams(string feature_params)
             {
                 if (!feature_params.Contains("--force-fieldtrial-params="))
                 {
-                    Console.WriteLine("Ошибка парсинга параметров!");
+                    //Log("Ошибка парсинга параметров!", true);
                     return;
                 }
 
@@ -205,7 +216,7 @@ namespace WinFormsApp1
                     var temp = item.Split(':');
                     if (temp.Length < 2)
                     {
-                        Console.WriteLine("Ошибка! Ожидаемый формат (exp.value:params1/value/params2/value...). Полученный формат: " + item);
+                        //Log("Ошибка получения параметров! Ожидаемый формат (exp.value:params1/value/params2/value...). Полученный формат: " + item, true);
                         continue;
                     }
 
@@ -215,12 +226,12 @@ namespace WinFormsApp1
 
                     if (!Experiments.ContainsKey(exp_name))
                     {
-                        Console.WriteLine("Не найден эксперимент {0} для передачи ему параметров {1}", exp_name, exp_params);
+                        //Log($"Не найден эксперимент {exp_name} для передачи ему параметров {exp_params}", true);
                         continue;
                     }
                     else if (Experiments[exp_name].Value != exp_val)
                     {
-                        Console.WriteLine("ВНИМАНИЕ! Включен эксперимент {0}/{1}, однако параметры заданы для {2}/{3}", Experiments[exp_name], Experiments[exp_name].Value, exp_name, exp_val);
+                        //Log($"ВНИМАНИЕ! Включен эксперимент {Experiments[exp_name]}/{Experiments[exp_name].Value}, однако параметры заданы для {exp_name}/{exp_val}", true);
                         continue;
                     }
 
@@ -233,9 +244,13 @@ namespace WinFormsApp1
                     }
                 }
 
-                Console.WriteLine("Парсинг параметров завершен. Добавлено параметров " + count);
+                //Log("Парсинг параметров завершен. Добавлено параметров " + count, true);
             }
 
+            /// <summary>
+            /// Читает всю конфигурацию и возвращет полную информацию
+            /// </summary>
+            /// <returns></returns>
             public string GetFullInfo()
             {
                 StringBuilder txt = new StringBuilder();
@@ -248,6 +263,10 @@ namespace WinFormsApp1
                 return txt.ToString();
             }
 
+            /// <summary>
+            /// Возвращает готовый ключ из конфигурации
+            /// </summary>
+            /// <returns></returns>
             public string GetKeysForCommandLine()
             {
                 StringBuilder fieldtrial = new StringBuilder();
@@ -287,10 +306,13 @@ namespace WinFormsApp1
                         else
                             enable_features.Append(",");
 
+                        string txt = "";
                         foreach (var feature in features)
                         {
-                            enable_features.AppendFormat("{0}<{1}", feature.Name, exp.Name);
+                            txt += string.Format("{0}<{1},", feature.Name, exp.Name);
                         }
+                        
+                        enable_features.Append(txt.TrimEnd(','));
                     }
 
                     features.Clear();
@@ -303,10 +325,12 @@ namespace WinFormsApp1
                         else
                             disable_features.Append(",");
 
+                        string txt = "";
                         foreach (var feature in features)
                         {
-                            disable_features.AppendFormat("{0}<{1}", feature.Name, exp.Name);
+                            txt+=string.Format("{0}<{1},", feature.Name, exp.Name);
                         }
+                        disable_features.Append(txt.TrimEnd(','));
                     }
                 }
 
@@ -326,6 +350,28 @@ namespace WinFormsApp1
                     fieldtrial_params.Length > 1 ? fieldtrial_params.ToString() : "",
                     enable_features.Length > 1 ? enable_features.ToString() : "",
                     disable_features.Length > 1 ? disable_features.ToString() : "");
+            }
+
+            /// <summary>
+            /// Сравнение конфигураций
+            /// </summary>
+            /// <param name="config_that">Сравниваемая конфигурация</param>
+            /// <returns>Возвращает новую конфигурацию в которой только отличающиеся эксперименты</returns>
+            public Configuration Compare(Configuration config_that)
+            {
+                var result = new Configuration();
+                foreach (var item in this.Experiments.Keys)
+                {
+                    // Не содержится во втором ключе или ключи отличаются
+                    if (!config_that.Experiments.ContainsKey(item) || !this.Experiments[item].Equals(config_that.Experiments[item]))
+                    {
+                        result.Experiments.Add(item, this.Experiments[item]);
+                    }
+                    // ключи одинаковые
+                }
+
+                //Log($"Проверено экспериментов {Experiments.Count}. Отличий {result.Experiments.Count}", true);
+                return result;
             }
         }
 

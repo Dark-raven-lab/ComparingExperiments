@@ -5,6 +5,7 @@
     <TargetFramework>net5.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>ExperimentsCompare</AssemblyName>
+    <RootNamespace>ExperimentsCompare</RootNamespace>
   </PropertyGroup>
 
 </Project>
